@@ -1,7 +1,7 @@
 from bluetooth import BluetoothSocket, RFCOMM, discover_devices, BluetoothError
 from threading import Thread
-from Packet import Packet
 import ipdb
+from PacketConnection import FramedPacketConnection
 
 def_start_byte = '\xfc'
 def_end_byte = '\xfd'
@@ -20,9 +20,9 @@ dead = 7
 
 D = True
     
-class BluetoothConnection(object):
+class BluetoothConnection(FramedPacketConnection):
     """
-    Creates a new bluetooth connection.
+    Creates a new framed bluetooth connection based on packet communication.
     
     Parameters
     ----------
@@ -45,22 +45,14 @@ class BluetoothConnection(object):
     """
     def __init__(self, callback, auto_reconnect = True, framed = True, start_byte = def_start_byte, end_byte = def_end_byte, 
                  escape_byte = def_escape_byte, octet_stuff_byte = def_octet_stuff_byte):
+        FramedPacketConnection.__init__(self, callback, auto_reconnect, framed, start_byte, end_byte, escape_byte, octet_stuff_byte)
         self.client_socket = None
         self.server_socket = None
-        self.callback = callback
         self.state = disconnected
-        self.start_byte = start_byte
-        self.end_byte = end_byte
-        self.escape_byte = escape_byte
-        self.octet_stuff_byte = octet_stuff_byte
-        self.curr_packet = Packet()
-        self.auto_reconnect = auto_reconnect
-        self.framed = framed
-    
+        
     """ Open port and wait for other devices to connect """
     def createServer(self, port = 3):
         self.server_socket=BluetoothSocket( RFCOMM )
-
         self.server_socket.bind(("", port))
         self.server_socket.listen(1)
 
@@ -89,76 +81,6 @@ class BluetoothConnection(object):
     def searchDevices(self):
         return discover_devices()
     
-    """ Change the state of this Bluetooth Connection. Should only be used internally. """
-    def change_state(self, new_state):
-        if D: print "Changing state to " + repr(new_state)
-        self.state = new_state
-    
-    """ Method to be called when a new byte comes in 
-        on the open socket. Parses the bytes into packets. """ 
-    def byte_callback(self, dat):
-        if self.framed:
-            if self.state == ready:
-                if dat == self.start_byte:
-                    self.curr_packet.set_start_time()
-                    self.change_state(incoming)
-                
-            elif self.state == incoming:
-                if dat == self.escape_byte:
-                    self.change_state(escaping)
-                elif dat == self.end_byte:
-                    self.curr_packet.set_end_time()
-                    self.change_state(received)
-                else:
-                    self.curr_packet.put_byte(dat)
-                    
-            elif self.state == escaping:
-                dat = chr(ord(dat)^ord(self.octet_stuff_byte))
-                self.curr_packet.put_byte(dat)
-                self.change_state(incoming)
-            
-            if self.state == received:
-                self.change_state(ready)
-                self.callback(Packet(self.curr_packet))
-                self.curr_packet = Packet()
-                
-        # In unframed mode, 1 byte = 1 packet.         
-        else:
-            self.change_state(incoming)
-            self.curr_packet.put_byte(dat)
-            self.change_state(ready)
-            self.callback(Packet(self.curr_packet))
-            self.curr_packet.set_start_time()
-            self.curr_packet = Packet()
-            
-    
-    """ Send raw data (without using packets). This method should only be used internally """
-    def sendData(self, data):
-        # XXX: This could wait for connection to be ready and then try again
-        if self.state == ready:
-            self.client_socket.send(data)
-        else:
-            if D: print "State is:  " + repr(self.state)
-            ipdb.set_trace()
-            if D: print "Connection is not ready, cannot send packet!"
-    
-    """ Frames and sends a packet over the connection """
-    def sendPacket(self, pck):
-        dat = pck.get_data()
-        lst = []
-        lst.append(self.start_byte)
-        
-        for i in range(len(dat)):
-            if (self.needs_escaping(dat[i])):
-                lst.append(self.escape_byte)
-                # XXX: Ugly line of code.
-                lst.append(chr(ord(dat[i])^ord(self.octet_stuff_byte)))
-            else:
-                lst.append(dat[i])
-        
-        lst.append(self.end_byte)
-        self.sendData("".join(lst))
-    
     """ Closes the bluetooth socket """
     def closeConnection(self):
         if self.server_socket is not None:
@@ -166,13 +88,7 @@ class BluetoothConnection(object):
         
         self.client_socket.close()
         self.change_state(dead)
-    
-    """ Returns whether a byte needs to be escaped in a packet. """
-    def needs_escaping(self, dat):
-        return (((dat == self.start_byte) or
-                 (dat == self.end_byte)) or
-                 (dat == self.escape_byte))
-        
+
         
 # A thread that waits on the open socket for incoming bytes
 class ConnectedThread(Thread):
@@ -188,7 +104,6 @@ class ConnectedThread(Thread):
             except BluetoothError:
                 if (D): print "Connection lost!"
                 return
-        
-        
-        
+
+
         

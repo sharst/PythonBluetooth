@@ -1,4 +1,4 @@
-from FramedBluetoothConnection import BluetoothConnection
+from BluetoothConnection import BluetoothConnection
 from Packet import Packet
 
 class ConnectionTest():

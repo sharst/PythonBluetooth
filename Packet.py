@@ -1,14 +1,24 @@
 import struct
 from time import time
 
-# XXX: This class still needs more functions for adding data (also, importantly, at specific 
-# byte positions!)
+# XXX: This class still needs more functions for adding data 
 
 class Packet(object):
     """
     This class represents a single packet that can be sent over bluetooth.
     It also supports parsing various types directly into a package. 
-    Packet framing is done directly by the bluetooth connection.
+    
+    The methods for adding data are ordered into put, get, append and pop methods:
+        * put-methods swap the bytes currently maintained in the packets for bytes representing 
+          the given data. E.g. put_int(4) makes the data in this packet represent only the integer "4"
+          and discards any data that was previously stored.
+        * get-methods do the opposite: They assume that the packet contains only one datum of the given
+          type. E.g. get_int() takes all the data in the packet and parses it into a single int. 
+        * append-methods parse the given data into byte format and add it to the current position in the packet
+          this way, several types can be added to a packet. 
+        * pop-methods read data from the current position and parse it into an instance of the given type 
+    
+    Packet framing is done independently by the bluetooth connection.
     
     Parameters
     ----------
@@ -31,7 +41,7 @@ class Packet(object):
             self.end_time = 0
             if littleendian: self.endian = "<"
             else: self.endian = ">"
-    
+        self.position = 0 # Read/write byte position
     
     """ Sets the time in ms when the first byte of the packet was received. If no time is given, 
         the current time is used."""
@@ -59,43 +69,158 @@ class Packet(object):
     
     """ Appends a byte to the current data stored in this packet. 
         The byte should be given in string form, e.g. '\xef' """
-    def put_byte(self, b):
+    def append_byte(self, b):
         self.data += b
+        self.position += 1
     
+        
+    ### Ints ###
+    
+    """ Store an int in this packet """     
+    def put_int(self, integer):
+        self.data = struct.pack(self.endian + "i", integer)
+
+    
+    """ Get an int from this packet """     
+    def get_int(self):
+        if len(self.data)==4:
+            return struct.unpack(self.endian + "i", self.data)[0]#
+        else:
+            print "Only 4-byte packets can be parsed into ints."
+    
+    """ Parse the next bytes into an int. """
+    def pop_int(self):
+        val = struct.unpack(self.endian+"i", self.int[self.position:self.position+4])[0]
+        self.position += 4
+        return val
+        
+    """ Append an int to this packet """     
+    def append_int(self, integer):
+        self.data += struct.pack(self.endian+"i", integer)
+        self.position += 4
+        
+    
+    ### Floats ###
+    """ Store a float in this packet """
+    def put_float(self, val):
+        self.data = ""
+        self.append_float(val)
+    
+    def get_float(self):
+        self.position = 0
+        return self.pop_float()
+    
+    """
+    Pop a float from the current position
+    """            
+    def pop_float(self):
+        val = struct.unpack(self.endian+"f", self.data[self.position:self.position+4])[0]
+        self.position += 4
+        return val 
+    
+    """
+    Append a float to this packet
+    """
+    def append_float(self, val):
+        self.data += struct.pack(self.endian+"f", val)
+        self.position += 4
+        
+    
+    ### Float lists ###
+    
+    """
+    Pop a float list from the current position
+    """
+    def pop_float_list(self):
+        if not len(self.data) < 4:
+            if len(self.data)%4 == 0:  
+                # First is the length of the list as an int         
+                length = self.pop_int()
+                val = [self.pop_float() for _ in range(length)]
+                return val
+            else:
+                print "The stored data cannot be parsed into a list of floats."
+    
+    """ Append a list of floats to this packet """
+    def append_float_list(self, lst):
+        if type(lst)==list:
+            # First append the length of the list
+            self.append_int(len(lst))
+            for val in lst:
+                self.append_float(val)
+        else:
+            print "arg lst may only be of type list!"
+        
+        
     """ Parse the data in this packet into a list of floats """
     def read_float_list(self):
         if not (len(self.data) == 0): 
             if len(self.data)%4 == 0:
-                return [struct.unpack(self.endian+"f", self.data[i*4:i*4+4])[0] for i in range(len(self.data)/4)]
+                val = []
+                self.position = 0
+                while self.position<len(self.data):
+                    val.append(self.pop_float())
+                return val
             else:
                 print "The stored data cannot be parsed into a list of floats."
     
+
     """ Store a list of floats in this packet """
     def put_float_list(self, lst):
         if type(lst)==list:
-            self.data = "".join([struct.pack(self.endian+"f", lst[i]) for i in range(len(lst))])
+            for val in lst:
+                self.append_float(val)
         else:
             print "arg lst may only be of type list!"
 
+
+    ### Int lists ###
+    
+        
     """ Parse the data in this packet into a list of ints """
     def read_int_list(self):
         if not (len(self.data) == 0): 
             if len(self.data)%4 == 0:
-                return [struct.unpack(self.endian+"i", self.data[i*4:i*4+4])[0] for i in range(len(self.data)/4)]
+                val = []
+                self.position = 0
+                while self.position<len(self.data):
+                    val.append(self.pop_int())
+                return val
             else:
                 print "The stored data cannot be parsed into a list of ints."
     
-    """ Store a list of ints in this packet """      
+
+    """ Store a list of ints in this packet """
     def put_int_list(self, lst):
         if type(lst)==list:
-            self.data = "".join([struct.pack(self.endian+"i", lst[i]) for i in range(len(lst))])
+            for val in lst:
+                self.append_int(val)
         else:
             print "arg lst may only be of type list!"
     
-    """ Store an int in this packet """     
-    def put_int(self, integer):
-        self.data = struct.pack("<i", integer)
     
-    """ Get an int from this packet """     
-    def get_int(self):
-        self.data = struct.unpack("<i", int)[0]
+    """
+    Pop an int list from the current position
+    """
+    def pop_int_list(self):
+        if not len(self.data) < 4:
+            if len(self.data)%4 == 0:  
+                # First is the length of the list as an int         
+                length = self.pop_int()
+                val = [self.pop_int() for _ in range(length)]
+                return val
+            else:
+                print "The stored data cannot be parsed into a list of ints."
+    
+    """ Append a list of ints to this packet """
+    def append_int_list(self, lst):
+        if type(lst)==list:
+            # First append the length of the list
+            self.append_int(len(lst))
+            for val in lst:
+                self.append_int(val)
+        else:
+            print "arg lst may only be of type list!"
+        
+    
+        
