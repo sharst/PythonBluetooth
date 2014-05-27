@@ -1,7 +1,7 @@
 from BluetoothConnection import BluetoothConnection
 from Packet import Packet
 
-class ConnectionTest():
+class RelayStation():
     def __init__(self):
         self.conn = BluetoothConnection(self.callback)
     
@@ -20,7 +20,7 @@ class ConnectionTest():
     
 if __name__=="__main__":
     #try:
-    test = ConnectionTest()
+    test = RelayStation()
     test.connect()
     #finally:
         #pass

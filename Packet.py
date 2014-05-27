@@ -1,7 +1,6 @@
 import struct
 from time import time
 
-# XXX: This class still needs more functions for adding data 
 
 class Packet(object):
     """
@@ -59,6 +58,15 @@ class Packet(object):
         else:
             self.end_time = t
     
+    """
+    Returns whether there are still bytes left to be read via the pop-methods
+    """
+    def has_next(self):
+        if self.position < len(self.data):
+            return True
+        else:
+            return False
+    
     """ Swap the bytes of this packet for the bytes given in data """
     def put_data(self, data):
         self.data = data
@@ -90,7 +98,7 @@ class Packet(object):
     
     """ Parse the next bytes into an int. """
     def pop_int(self):
-        val = struct.unpack(self.endian+"i", self.int[self.position:self.position+4])[0]
+        val = struct.unpack(self.endian+"i", self.data[self.position:self.position+4])[0]
         self.position += 4
         return val
         
@@ -98,8 +106,54 @@ class Packet(object):
     def append_int(self, integer):
         self.data += struct.pack(self.endian+"i", integer)
         self.position += 4
-        
     
+    ### Chars ###
+    """ Store a char in this packet """
+    def put_char(self, char):
+        self.data = struct.pack(self.endian + "c", char)
+
+    """ Get a char from this packet """     
+    def get_char(self):
+        return struct.unpack(self.endian + "c", self.data)[0]
+    
+    """ Parse the next byte into a char. """
+    def pop_char(self):
+        val = struct.unpack(self.endian+"c", self.data[self.position])[0]
+        self.position += 1
+        return val
+        
+    """ Append a char to this packet """     
+    def append_char(self, char):
+        self.data += struct.pack(self.endian+"c", char)
+        self.position += 1
+    
+    ### Strings ###
+    """ Store a string in this packet """     
+    def put_string(self, string):
+        for character in string:
+            self.append_char(character)
+
+    """ Get a string from this packet """     
+    def get_string(self):
+        res = ""
+        for _ in range(len(self.data)):
+            res += self.pop_char()
+        return res
+    
+    """ Parse the next bytes into a string. """
+    def pop_string(self):
+        length = self.pop_int()
+        res = ""
+        for _ in range(length):
+            res += self.pop_char()
+        return res
+        
+    """ Append a string to this packet """     
+    def append_string(self, string):
+        self.append_int(len(string))
+        for ch in string:
+            self.append_char(ch)
+        
     ### Floats ###
     """ Store a float in this packet """
     def put_float(self, val):

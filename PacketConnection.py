@@ -18,7 +18,7 @@ escaping = 5
 received = 6
 dead = 7
 
-D = True
+D = False
 
 class FramedPacketConnection(object):
     """
@@ -53,6 +53,7 @@ class FramedPacketConnection(object):
         self.curr_packet = Packet()
         self.auto_reconnect = auto_reconnect
         self.framed = framed
+        self.state = disconnected
 
     
     """ Change the state of this Bluetooth Connection. Should only be used internally. """
@@ -76,11 +77,11 @@ class FramedPacketConnection(object):
                     self.curr_packet.set_end_time()
                     self.change_state(received)
                 else:
-                    self.curr_packet.put_byte(dat)
+                    self.curr_packet.append_byte(dat)
                     
             elif self.state == escaping:
                 dat = chr(ord(dat)^ord(self.octet_stuff_byte))
-                self.curr_packet.put_byte(dat)
+                self.curr_packet.append_byte(dat)
                 self.change_state(incoming)
             
             if self.state == received:
@@ -91,7 +92,7 @@ class FramedPacketConnection(object):
         # In unframed mode, 1 byte = 1 packet.         
         else:
             self.change_state(incoming)
-            self.curr_packet.put_byte(dat)
+            self.curr_packet.append_byte(dat)
             self.change_state(ready)
             self.callback(Packet(self.curr_packet))
             self.curr_packet.set_start_time()
@@ -123,7 +124,11 @@ class FramedPacketConnection(object):
                 lst.append(dat[i])
         
         lst.append(self.end_byte)
+        print "Connection sending data..."
         self.sendData("".join(lst))
+    
+    def is_ready(self):
+        return self.state == ready
     
     """ Returns whether a byte needs to be escaped in a packet. """
     def needs_escaping(self, dat):

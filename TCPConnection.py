@@ -51,9 +51,10 @@ class TCPConnection(FramedPacketConnection):
         self.state = disconnected
         
     """ Open port and wait for other devices to connect """
-    def createServer(self, port = 3):
+    def createServer(self, port = 5000):
         self.server_socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((socket.gethostname(), 5000))
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # XXX: Reuse address maybe shouldnt be default?
+        self.server_socket.bind(("", port))
         if D: print "This server is now reachable under the name " + socket.gethostname()
         self.server_socket.listen(1)
         
@@ -63,21 +64,28 @@ class TCPConnection(FramedPacketConnection):
             if D: print "Now connected to "+ repr(address)
             self.change_state(ready)
         
-            conn_thread = ConnectedThread(self.client_socket, self.byte_callback)
-            conn_thread.run()
+            thread = Thread(target=listen_at_socket, args=(self.client_socket, self.byte_callback))
+            thread.start()
+
             if not self.auto_reconnect:
                 break
     
     """ Actively connect to another device with an address """
-    def createClient(self, address, port = 3000):
+    def createClient(self, address, port = 5000):
         self.client_socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # XXX: Reuse address maybe shouldnt be default?
         if D: print "Trying to connect.."
         self.client_socket.connect((address, port))
         if D: print "Connected!"
         self.change_state(ready)
-
+        
+        thread = Thread(target=listen_at_socket, args=(self.client_socket, self.byte_callback))
+        thread.start()
+        #conn_thread = ConnectedThread(self.client_socket, self.byte_callback)
+        #conn_thread.run()
+        print "Started connected thread"
     
-    """ Closes the bluetooth socket """
+    """ Closes the socket """
     def closeConnection(self):
         if self.server_socket is not None:
             self.server_socket.close()
@@ -85,21 +93,12 @@ class TCPConnection(FramedPacketConnection):
         self.client_socket.close()
         self.change_state(dead)
 
-        
-# A thread that waits on the open socket for incoming bytes
-class ConnectedThread(Thread):
-    def __init__(self, socket, callback):
-        self.callback = callback
-        self.socket = socket
-        
-    def run(self):
-        while True:
-            #try:
-            dat = self.socket.recv(1)
-            self.callback(dat)
-            #except BluetoothError:
-            #    if (D): print "Connection lost!"
-            #    return
+
+def listen_at_socket(socket, callback):
+    while True:
+        dat = socket.recv(1)
+        callback(dat)
+
 
 
         
