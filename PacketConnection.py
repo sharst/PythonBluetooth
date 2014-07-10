@@ -18,7 +18,7 @@ escaping = 5
 received = 6
 dead = 7
 
-D = False
+D = True
 
 class FramedPacketConnection(object):
     """
