@@ -1,5 +1,6 @@
 from BluetoothConnection import BluetoothConnection
 from Packet import Packet
+import ipdb
 
 class RelayStation():
     def __init__(self):
@@ -12,10 +13,12 @@ class RelayStation():
         self.conn.closeConnection()
 
     def callback(self, pck):
-        print "Received new packet: " + repr(pck.read_float_list())
+        #ipdb.set_trace()
+        cont = pck.pop_float_list()
+        print "Received new packet: " + repr(cont)
         
         out = Packet()
-        out.put_float_list(pck.read_float_list())
+        out.append_float_list(cont)
         self.conn.sendPacket(out)
     
 if __name__=="__main__":

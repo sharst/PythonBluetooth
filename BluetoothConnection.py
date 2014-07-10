@@ -49,21 +49,33 @@ class BluetoothConnection(FramedPacketConnection):
         self.client_socket = None
         self.server_socket = None
         self.state = disconnected
+        self.running = True
         
     """ Open port and wait for other devices to connect """
     def createServer(self, port = 3):
         self.server_socket=BluetoothSocket( RFCOMM )
         self.server_socket.bind(("", port))
         self.server_socket.listen(1)
-
+        self.server_socket.settimeout(.5)
+        
         while True:
+            if not self.running:
+                break
             if D: print "Trying to connect.."
-            self.client_socket, _ = self.server_socket.accept()
+            try:
+                self.client_socket, _ = self.server_socket.accept()
+                self.client_socket.settimeout(.5)
+            except BluetoothError:
+                self.change_state(disconnected)
+                continue
+                
             if D: print "Connected!"
             self.change_state(ready)
         
             conn_thread = ConnectedThread(self.client_socket, self.byte_callback)
             conn_thread.run()
+            
+            
             if not self.auto_reconnect:
                 break
     
@@ -84,10 +96,17 @@ class BluetoothConnection(FramedPacketConnection):
     """ Closes the bluetooth socket """
     def closeConnection(self):
         if self.server_socket is not None:
+            if (D): print "Closing server socket"
             self.server_socket.close()
-        
-        self.client_socket.close()
+            self.server_socket = None
+    
+        if self.client_socket is not None:
+            if (D): print "Closing client socket"
+            self.client_socket.close()
+            self.client_socket = None
+            
         self.change_state(dead)
+        self.running = False
 
         
 # A thread that waits on the open socket for incoming bytes
@@ -101,9 +120,12 @@ class ConnectedThread(Thread):
             try:
                 dat = self.socket.recv(1)
                 self.callback(dat)
-            except BluetoothError:
-                if (D): print "Connection lost!"
-                return
+            except BluetoothError, e:
+                if e.message=="timed out":
+                    continue
+                else:
+                    if (D): print "Connection lost!"
+                    return
 
 
         

@@ -54,6 +54,7 @@ class FramedPacketConnection(object):
         self.auto_reconnect = auto_reconnect
         self.framed = framed
         self.state = disconnected
+        self.server = None   # Says whether this connection is running in server mode.
 
     
     """ Change the state of this Bluetooth Connection. Should only be used internally. """
@@ -64,6 +65,11 @@ class FramedPacketConnection(object):
     """ Method to be called when a new byte comes in 
         on the open socket. Parses the bytes into packets. """ 
     def byte_callback(self, dat):
+        #ipdb.set_trace()
+        if dat == "":
+            self.connection_reset()
+            return
+        
         if self.framed:
             if self.state == ready:
                 if dat == self.start_byte:
@@ -127,8 +133,15 @@ class FramedPacketConnection(object):
         print "Connection sending data..."
         self.sendData("".join(lst))
     
+    def connection_reset(self):
+        if D: print "PacketConnection is being reset."
+        self.curr_packet = Packet()
+        
     def is_ready(self):
         return self.state == ready
+    
+    def is_disconnected(self):
+        return (self.state == disconnected) or (self.state == dead)
     
     """ Returns whether a byte needs to be escaped in a packet. """
     def needs_escaping(self, dat):
