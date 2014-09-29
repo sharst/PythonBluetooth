@@ -140,6 +140,9 @@ class FramedPacketConnection(object):
     def is_ready(self):
         return self.state == ready
     
+    def is_disconnected(self):
+        return (self.state == disconnected) or (self.state == dead)
+    
     """ Returns whether a byte needs to be escaped in a packet. """
     def needs_escaping(self, dat):
         return (((dat == self.start_byte) or
