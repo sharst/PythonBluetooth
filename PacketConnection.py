@@ -130,7 +130,7 @@ class FramedPacketConnection(object):
                 lst.append(dat[i])
         
         lst.append(self.end_byte)
-        print "Connection sending data..."
+        print "Connection sending data: " + repr(lst)
         self.sendData("".join(lst))
     
     def connection_reset(self):
